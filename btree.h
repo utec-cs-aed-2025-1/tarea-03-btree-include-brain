@@ -27,7 +27,6 @@ class BTree {
       root->leaf = true;
       root->keys[0] = key;
       root->count = 1;
-      for (int i = 0; i <= M; ++i) root->children[i] = nullptr;
       n = 1;
       return;
     }
@@ -314,7 +313,7 @@ class BTree {
   bool remove_rec(Node<TK>* x, const TK& key) {
     int idx = find_index(x, key);
 
-    if (idx < x->count && eq(x->keys[idx], key)) {
+    if (idx < x->count && (x->keys[idx] == key)) {
       if (x->leaf) {
         for (int i = idx + 1; i < x->count; ++i) x->keys[i - 1] = x->keys[i];
         x->count -= 1;
@@ -349,9 +348,6 @@ class BTree {
       return remove_rec(x->children[idx], key);
     }
   }
-
-  // insert
-  static bool eq(const TK& a, const TK& b) { return !(a < b) && !(b < a); }
 
   void insert_key_at(Node<TK>* x, int pos, const TK& k, Node<TK>* rightChild) {
     for (int i = x->count; i > pos; --i) x->keys[i] = x->keys[i - 1];
@@ -388,7 +384,7 @@ class BTree {
   bool insert_rec(Node<TK>* x, const TK& key, bool& promoted, TK& up, Node<TK>*& right) {
     int i = 0;
     while (i < x->count && x->keys[i] < key) ++i;
-    if (i < x->count && eq(x->keys[i], key)) return false;
+    if (x->keys[i] == key) return false;
 
     if (x->leaf) {
       for (int j = x->count; j > i; --j) x->keys[j] = x->keys[j - 1];
