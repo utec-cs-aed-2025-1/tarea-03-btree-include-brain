@@ -18,128 +18,35 @@ class BTree {
 
   //indica si se encuentra o no un elemento
   bool search(TK key) {
-    return search(this->root, key);
+    return search_rec(this->root, key);
   }
 
   Node<TK>* insert(TK key){
     //caso1: arbol sin raiz
     if(!root){
-        root = new Node<TK>(M);
-        root->keys[0] = key;
-        root->count = 1;
-        root->leaf = true;
-        n = 1;
-        return root;
+      root = new Node<TK>(M);
+      root->keys[0] = key;
+      root->count = 1;
+      root->leaf = true;
+      n = 1;
+      return root;
     }
 
-    //caso2: insertar en la raiz
-    Node<TK>* return_node = insert_rec(root, key);
-    if(!return_node) return root;
+    //caso2: insertar normalmente
+    n++;
+    TK promoted_key;
+    Node<TK>* new_child = insert_rec(root, key, promoted_key);
+    if(!new_child) return root;
 
     //caso3: split en la raiz
     Node<TK>* new_root = new Node<TK>(M);
     new_root->leaf = false;
-
-    //nueva raiz
-    int mid_idx = M / 2;
-    new_root->keys[0] = return_node->keys[mid_idx];
+    new_root->keys[0] = promoted_key;
     new_root->count = 1;
     new_root->children[0] = root;
-
-    Node<TK>* right_node = new Node<TK>(M);
-    right_node->leaf = return_node->leaf;
-
-    int right_count = 0;
-    for(int i = mid_idx + 1; i < return_node->count; i++){
-        right_node->keys[right_count] = return_node->keys[i];
-        right_count++;
-    }
-    right_node->count = right_count;
-    if(!return_node->leaf){
-        for(int i = mid_idx + 1; i <= return_node->count; i++){
-            right_node->children[i - (mid_idx + 1)] = return_node->children[i];
-            return_node->children[i] = nullptr;
-        }
-    }
-    return_node->count = mid_idx;
-    new_root->children[1] = right_node;
+    new_root->children[1] = new_child;
     root = new_root;
-    n++;
     return root;
-  }
-
-  Node<TK>* insert_rec(Node<TK>* node, TK key){
-    int left = 0, right = node->count - 1;
-    while(left <= right){
-      int mid = left + (right - left) / 2;
-      if(node->keys[mid] == key) return nullptr;
-      if(node->keys[mid] < key) left = mid + 1;
-      else right = mid - 1;
-    }
-
-    if(node->leaf){
-      int insert_pos = node->count;
-      while(insert_pos > 0 && node->keys[insert_pos - 1] > key){
-          node->keys[insert_pos] = node->keys[insert_pos - 1];
-          insert_pos--;
-      }
-      node->keys[insert_pos] = key;
-      node->count++;
-      if(node->count == M){
-          return node;
-      }
-      return nullptr;
-    }
-    else {
-      int child_idx = 0;
-      left = 0;
-      right = node->count - 1;
-      while(left <= right){
-          int mid = left + (right - left) / 2;
-          if(key < node->keys[mid]){
-              right = mid - 1;
-          } else {
-              left = mid + 1;
-              child_idx = left;
-          }
-      }
-      Node<TK>* return_node = insert_rec(node->children[child_idx], key);
-      if(!return_node) return nullptr;
-      int mid_idx = M / 2;
-      TK promoted_key = return_node->keys[mid_idx];
-
-      Node<TK>* right_child = new Node<TK>(M);
-      right_child->leaf = return_node->leaf;
-      int right_count = 0;
-      for(int j = mid_idx + 1; j < return_node->count; j++){
-          right_child->keys[right_count] = return_node->keys[j];
-          right_count++;
-      }
-      right_child->count = right_count;
-
-      if(!return_node->leaf){
-          for(int j = mid_idx + 1; j <= return_node->count; j++){
-              right_child->children[j - (mid_idx + 1)] = return_node->children[j];
-              return_node->children[j] = nullptr;
-          }
-      }
-      return_node->count = mid_idx;
-
-      int insert_pos = node->count;
-      while(insert_pos > 0 && node->keys[insert_pos - 1] > promoted_key){
-          node->keys[insert_pos] = node->keys[insert_pos - 1];
-          node->children[insert_pos + 1] = node->children[insert_pos];
-          insert_pos--;
-      }
-      node->keys[insert_pos] = promoted_key;
-      node->children[insert_pos + 1] = right_child;
-      node->count++;
-
-      if(node->count == M){
-          return node;
-      }
-      return nullptr;
-    }
   }
 
   void remove(TK key) {
@@ -186,13 +93,13 @@ class BTree {
     vector<TK> out;
     if (!root) return out;
     if (end < begin) std::swap(begin, end);
-    range_search(root, begin, end, out);
+    range_search_rec(root, begin, end, out);
     return out;
   }
 
   // mínimo valor del árbol
   TK minKey() {
-    if (!root) throw runtime_error("The tree is empty");
+    if (!root) throw runtime_error("El árbol está vacío");
     Node<TK>* temp = root;
 
     while (!temp->leaf) {
@@ -203,7 +110,7 @@ class BTree {
 
   // máximo valor del árbol
   TK maxKey() {
-    if (!root) throw runtime_error("The tree is empty");
+    if (!root) throw runtime_error("El árbol está vacío");
     Node<TK>* temp = root;
 
     while (!temp->leaf) {
@@ -223,9 +130,7 @@ class BTree {
   }
 
   // retorna el total de elementos insertados
-  int size() const {
-    return n;
-  }
+  int size() const { return n; }
 
   // Construya un árbol B a partir de un vector de elementos ordenados
   static BTree<TK>* build_from_ordered_vector(const vector<TK>& elements, int M) {
@@ -313,6 +218,90 @@ class BTree {
   }
 
  private:
+  Node<TK>* split(Node<TK>* node, TK& promoted_key, bool is_leaf) {
+    int mid_idx = M / 2;
+    promoted_key = node->keys[mid_idx];
+
+    // partir a la mitad el nodo actual
+    Node<TK>* right = new Node<TK>(M);
+    right->leaf = is_leaf;
+    int j = 0;
+    for(int i = mid_idx + 1; i < node->count; i++){
+      right->keys[j++] = node->keys[i];
+    }
+    right->count = j;
+
+    // organizar los hijos si no es hoja
+    if(!is_leaf) {
+      for(int i = mid_idx + 1, k = 0; i <= node->count; i++, k++){
+        right->children[k] = node->children[i];
+        node->children[i] = nullptr;
+      }
+    }
+
+    node->count = mid_idx;
+    return right; // se retorna la key que sube y el nodo partido
+  }
+
+  Node<TK>* insert_rec(Node<TK>* node, TK key, TK& promoted_key){
+    //busqueda binaria del indice > key
+    int left = 0, right = node->count - 1;
+    int child_idx = 0;
+    while(left <= right){
+      int mid = left + (right - left) / 2;
+      if(node->keys[mid] == key) {
+          n--; // llave duplicada, sin insercion
+          return nullptr;
+      }
+      if(node->keys[mid] < key) {
+          left = mid + 1;
+          child_idx = left;
+      } else {
+          right = mid - 1;
+      }
+    }
+
+    if(node->leaf){
+      // insertar en hoja desplazando las keys
+      int insert_pos = node->count;
+      while(insert_pos > 0 && node->keys[insert_pos - 1] > key){
+          node->keys[insert_pos] = node->keys[insert_pos - 1];
+          insert_pos--;
+      }
+      node->keys[insert_pos] = key;
+      node->count++;
+
+      //split en hoja
+      if(node->count == M){
+          return split(node, promoted_key, true);
+      }
+      return nullptr;
+    }
+    else {
+      // nodo interno = descender recursivamente
+      TK child_promoted_key;
+      Node<TK>* new_child = insert_rec(node->children[child_idx], key, child_promoted_key);
+      if(!new_child) return nullptr; // sin split
+
+      // hubo split, insertar la clave promovida en padre
+      int insert_pos = node->count;
+      while(insert_pos > child_idx && node->keys[insert_pos - 1] > child_promoted_key){
+          node->keys[insert_pos] = node->keys[insert_pos - 1];
+          node->children[insert_pos + 1] = node->children[insert_pos];
+          insert_pos--;
+      }
+      node->keys[insert_pos] = child_promoted_key;
+      node->children[insert_pos + 1] = new_child;
+      node->count++;
+
+      // split en padre
+      if(node->count == M){
+          return split(node, promoted_key, false);
+      }
+      return nullptr;
+    }
+  }
+
   // remove
   int find_index(Node<TK>* x, const TK& k) {
     int i = 0;
@@ -400,6 +389,7 @@ class BTree {
 
     delete right;
   }
+
   void fill_child(Node<TK>* x, int idx) {
     int t = (M + 1) / 2;
     if (idx > 0 && x->children[idx - 1]->count >= t) {
@@ -454,7 +444,7 @@ class BTree {
   }
 
   // helpers
-  void range_search(Node<TK>* x, const TK& a, const TK& b, vector<TK>& out) {
+  void range_search_rec(Node<TK>* x, const TK& a, const TK& b, vector<TK>& out) {
     if (!x) return;
 
     if (x->leaf) {
@@ -467,14 +457,14 @@ class BTree {
     }
 
     for (int i = 0; i < x->count; ++i) {
-      range_search(x->children[i], a, b, out);
+      range_search_rec(x->children[i], a, b, out);
 
       if (!(x->keys[i] < a) && !(b < x->keys[i]))
         out.push_back(x->keys[i]);
       else if (b < x->keys[i])
         return;
     }
-    range_search(x->children[x->count], a, b, out);
+    range_search_rec(x->children[x->count], a, b, out);
   }
 
   bool check(Node<TK>* x,
@@ -527,20 +517,27 @@ class BTree {
     return true;
   }
 
-  bool search(Node<TK>* nodo, TK key) {
-    if (!nodo) return false;  // árbol vacío
-
-    int i = 0;
-    while (i < nodo->count && key > nodo->keys[i]) {
-      i++;
-    }
-    if (i < nodo->count && key == nodo->keys[i]) {
-      return true;
+  bool search_rec(Node<TK>* nodo, TK key) {
+    if (!nodo) return false;
+    int left = 0, right = nodo->count - 1;
+    int pos = nodo->count;
+    while (left <= right) {
+      int mid = left + (right - left) / 2;
+      if (nodo->keys[mid] == key) {
+        return true;
+      }
+      if (key < nodo->keys[mid]) {
+        pos = mid;
+        right = mid - 1;
+      } else {
+        left = mid + 1;
+        pos = left;
+      }
     }
     if (nodo->leaf) {
       return false;
     }
-    return search(nodo->children[i], key);
+    return search_rec(nodo->children[pos], key);
   }
 
   void toString(Node<TK>* nodo, const string& sep, string& out, bool& first) {
