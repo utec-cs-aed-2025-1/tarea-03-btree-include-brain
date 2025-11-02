@@ -2,6 +2,7 @@
 #define BTree_H
 #include <iostream>
 #include <vector>
+#include <stdexcept>
 #include "node.h"
 
 using namespace std;
@@ -133,76 +134,89 @@ class BTree {
   int size() const { return n; }
 
   // Construya un árbol B a partir de un vector de elementos ordenados
-  static BTree<TK>* build_from_ordered_vector(const vector<TK>& elements, int M) {
-    BTree<TK>* T = new BTree<TK>(M);
-    T->n = static_cast<int>(elements.size());
-    if (elements.empty()) return T;
+  static BTree* build_from_ordered_vector(const std::vector<TK>& elements, int M) {
+    if (M < 3) throw std::invalid_argument("M debe ser como minimo 3");
+    BTree* tree = new BTree(M);
+    if (elements.empty()) return tree;
 
-    const int maxK = M - 1;
-    vector<Node<TK>*> level;
+    for (size_t i = 1; i < elements.size(); ++i)
+      if (!(elements[i-1] < elements[i]))
+        throw std::invalid_argument("Los elementos deben estar ordenados");
 
-    // hojas
-    for (size_t i = 0; i < elements.size();) {
-      Node<TK>* leaf = new Node<TK>(M);
-      leaf->leaf = true;
-      int take = std::min<int>(maxK, static_cast<int>(elements.size() - i));
-      for (int j = 0; j < take; ++j) leaf->keys[j] = elements[i + j];
-      leaf->count = take;
-      for (int c = 0; c <= leaf->count; ++c) leaf->children[c] = nullptr;
-      level.push_back(leaf);
-      i += take;
-    }
-
-    if (level.size() == 1) {
-      T->root = level[0];
-      return T;
-    }
-
-    // niveles internos
-    while (level.size() > 1) {
-      vector<Node<TK>*> next;
-
-      int nchildren = static_cast<int>(level.size());
-      int p = (nchildren + M - 1) / M;
-      int minC = (M + 1) / 2;
-      while (p > 1 && p * minC > nchildren) --p;
-      int base = nchildren / p;
-      int rem = nchildren % p;
-
-      int idx = 0;
-      for (int pi = 0; pi < p; ++pi) {
-        int cnum = base + (pi < rem ? 1 : 0);
-        if (cnum < minC && p > 1) cnum = minC;
-        if (cnum > M) cnum = M;
-
-        Node<TK>* parent = new Node<TK>(M);
-        parent->leaf = false;
-        parent->count = cnum - 1;
-
-        for (int c = 0; c < cnum; ++c) {
-          parent->children[c] = level[idx + c];
-        }
-        for (int c = cnum; c <= M; ++c) parent->children[c] = nullptr;
-
-        for (int k = 0; k < parent->count; ++k) {
-          parent->keys[k] = parent->children[k + 1]->keys[0];
-        }
-        next.push_back(parent);
-        idx += cnum;
-      }
-
-      if (next.size() == 1 && next[0]->count == 0 && next[0]->children[0]) {
-        Node<TK>* onlyChild = next[0]->children[0];
-        delete next[0];
-        next[0] = onlyChild;
-      }
-
-      level.swap(next);
-    }
-
-    T->root = level[0];
-    return T;
+        tree->root = build_recursive(elements, 0, elements.size(), M, /*isRoot=*/true);
+    return tree;
   }
+    // construye nodo con rango elements[start,end)
+    static Node<TK>* build_recursive(const std::vector<TK>& elements, size_t start, size_t end, int M, bool isRoot) {
+        size_t n = end - start; //calcular el tamaño
+        if (n == 0) return nullptr;
+
+        Node<TK>* node = new Node<TK>(M);
+    //calcular propiedades de llaves
+        int maxKeys = M - 1;
+        int minKeys = (M + 1) / 2 - 1;
+
+        // Caso base: es una hoja
+        if (n <= static_cast<size_t>(maxKeys)) {
+            node->leaf = true;
+            node->count = static_cast<int>(n);
+            for (size_t i = 0; i < n; ++i) node->keys[i] = elements[start + i];
+            return node;
+        }
+        //Nodos internos
+
+        node->leaf = false;
+
+        // child_total = n - (k-1) (k:numero de hijos)
+        int minChildSize = isRoot ? 1 : minKeys;
+        int chosen_k = 0;
+
+        int max_k_possible = std::min(M,(int)(n));
+
+        for (int k = max_k_possible; k >= 2; --k) {
+            int parent_keys = k - 1;
+            int child_total = static_cast<int>(n) - parent_keys;
+            if (child_total < k * minChildSize) continue;  // no alcanza mínimo por hijo
+            if (child_total > k * maxKeys) continue;       // excede máximo por hijo
+            chosen_k = k;
+            break;
+        }
+
+        // Por defecto se toma k como binario
+        if (chosen_k == 0) chosen_k = 2;
+
+        int k = chosen_k;
+        int parent_keys = k - 1;
+        int child_total = (int)(n) - parent_keys;
+
+        vector<size_t> child_sizes(k, child_total / k);
+        //sobrantes
+        int rem = child_total % k;
+        for (int i = 0; i < rem; ++i) child_sizes[i]++;
+
+        size_t idx = start;
+        int key_idx = 0;
+        for (int i = 0; i < k; ++i) {
+            size_t child_start = idx;
+            size_t child_end = idx + child_sizes[i];
+
+            // subárbol del hijo
+            Node<TK>* child = build_recursive(elements, child_start, child_end, M, false);
+            node->children[i] = child;
+
+            //asignar llaves del padre
+            if (i < k - 1) {
+                node->keys[key_idx++] = elements[child_end];
+                // omitimos esa llave usada
+                idx = child_end + 1;
+            } else {
+                idx = child_end;
+            }
+        }
+
+        node->count = key_idx; //n
+        return node;
+    }
 
   // Verifique las propiedades de un árbol B
   bool check_properties() {
@@ -543,14 +557,26 @@ class BTree {
   void toString(Node<TK>* nodo, const string& sep, string& out, bool& first) {
     if (!nodo) return;
 
+    // Si es hoja, simplemente imprime todas las claves en orden
+    if (nodo->leaf) {
+      for (int i = 0; i < nodo->count; ++i) {
+        if (!first) out += sep;
+        out += std::to_string(nodo->keys[i]);
+        first = false;
+      }
+      return;
+    }
+
+    // Nodo interno (inorder)
     for (int i = 0; i < nodo->count; ++i) {
-      if (!nodo->leaf) toString(nodo->children[i], sep, out, first);
+      toString(nodo->children[i], sep, out, first);
 
       if (!first) out += sep;
       out += std::to_string(nodo->keys[i]);
       first = false;
     }
-    if (!nodo->leaf) toString(nodo->children[nodo->count], sep, out, first);
+
+    toString(nodo->children[nodo->count], sep, out, first);
   }
 };
 
