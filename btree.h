@@ -21,35 +21,125 @@ class BTree {
     return search(this->root, key);
   }
 
-  void insert(TK key) {
-    if (!root) {
-      root = new Node<TK>(M);
-      root->leaf = true;
-      root->keys[0] = key;
-      root->count = 1;
-      for (int i = 0; i <= M; ++i) root->children[i] = nullptr;
-      n = 1;
-      return;
+  Node<TK>* insert(TK key){
+    //caso1: arbol sin raiz
+    if(!root){
+        root = new Node<TK>(M);
+        root->keys[0] = key;
+        root->count = 1;
+        root->leaf = true;
+        n = 1;
+        return root;
     }
 
-    bool promoted = false;
-    TK up{};
-    Node<TK>* right = nullptr;
+    //caso2: insertar en la raiz
+    Node<TK>* return_node = insert_rec(root, key);
+    if(!return_node) return root;
 
-    bool inserted = insert_rec(root, key, promoted, up, right);
-    if (!inserted) return;
+    //caso3: split en la raiz
+    Node<TK>* new_root = new Node<TK>(M);
+    new_root->leaf = false;
 
-    if (promoted) {
-      Node<TK>* r = new Node<TK>(M);
-      r->leaf = false;
-      r->count = 1;
-      r->keys[0] = up;
-      r->children[0] = root;
-      r->children[1] = right;
-      for (int i = 2; i <= M; ++i) r->children[i] = nullptr;
-      root = r;
+    //nueva raiz
+    int mid_idx = M / 2;
+    new_root->keys[0] = return_node->keys[mid_idx];
+    new_root->count = 1;
+    new_root->children[0] = root;
+
+    Node<TK>* right_node = new Node<TK>(M);
+    right_node->leaf = return_node->leaf;
+
+    int right_count = 0;
+    for(int i = mid_idx + 1; i < return_node->count; i++){
+        right_node->keys[right_count] = return_node->keys[i];
+        right_count++;
     }
-    ++n;
+    right_node->count = right_count;
+    if(!return_node->leaf){
+        for(int i = mid_idx + 1; i <= return_node->count; i++){
+            right_node->children[i - (mid_idx + 1)] = return_node->children[i];
+            return_node->children[i] = nullptr;
+        }
+    }
+    return_node->count = mid_idx;
+    new_root->children[1] = right_node;
+    root = new_root;
+    n++;
+    return root;
+  }
+
+  Node<TK>* insert_rec(Node<TK>* node, TK key){
+    int left = 0, right = node->count - 1;
+    while(left <= right){
+      int mid = left + (right - left) / 2;
+      if(node->keys[mid] == key) return nullptr;
+      if(node->keys[mid] < key) left = mid + 1;
+      else right = mid - 1;
+    }
+
+    if(node->leaf){
+      int insert_pos = node->count;
+      while(insert_pos > 0 && node->keys[insert_pos - 1] > key){
+          node->keys[insert_pos] = node->keys[insert_pos - 1];
+          insert_pos--;
+      }
+      node->keys[insert_pos] = key;
+      node->count++;
+      if(node->count == M){
+          return node;
+      }
+      return nullptr;
+    }
+    else {
+      int child_idx = 0;
+      left = 0;
+      right = node->count - 1;
+      while(left <= right){
+          int mid = left + (right - left) / 2;
+          if(key < node->keys[mid]){
+              right = mid - 1;
+          } else {
+              left = mid + 1;
+              child_idx = left;
+          }
+      }
+      Node<TK>* return_node = insert_rec(node->children[child_idx], key);
+      if(!return_node) return nullptr;
+      int mid_idx = M / 2;
+      TK promoted_key = return_node->keys[mid_idx];
+
+      Node<TK>* right_child = new Node<TK>(M);
+      right_child->leaf = return_node->leaf;
+      int right_count = 0;
+      for(int j = mid_idx + 1; j < return_node->count; j++){
+          right_child->keys[right_count] = return_node->keys[j];
+          right_count++;
+      }
+      right_child->count = right_count;
+
+      if(!return_node->leaf){
+          for(int j = mid_idx + 1; j <= return_node->count; j++){
+              right_child->children[j - (mid_idx + 1)] = return_node->children[j];
+              return_node->children[j] = nullptr;
+          }
+      }
+      return_node->count = mid_idx;
+
+      int insert_pos = node->count;
+      while(insert_pos > 0 && node->keys[insert_pos - 1] > promoted_key){
+          node->keys[insert_pos] = node->keys[insert_pos - 1];
+          node->children[insert_pos + 1] = node->children[insert_pos];
+          insert_pos--;
+      }
+      node->keys[insert_pos] = promoted_key;
+      node->children[insert_pos + 1] = right_child;
+      node->count++;
+
+      if(node->count == M){
+          return node;
+      }
+      return nullptr;
+    }
   }
 
   void remove(TK key) {
@@ -314,7 +404,7 @@ class BTree {
   bool remove_rec(Node<TK>* x, const TK& key) {
     int idx = find_index(x, key);
 
-    if (idx < x->count && eq(x->keys[idx], key)) {
+    if (idx < x->count && (x->keys[idx] == key)) {
       if (x->leaf) {
         for (int i = idx + 1; i < x->count; ++i) x->keys[i - 1] = x->keys[i];
         x->count -= 1;
@@ -348,68 +438,6 @@ class BTree {
       if (lastChild && idx > x->count) idx = x->count;
       return remove_rec(x->children[idx], key);
     }
-  }
-
-  // insert
-  static bool eq(const TK& a, const TK& b) { return !(a < b) && !(b < a); }
-
-  void insert_key_at(Node<TK>* x, int pos, const TK& k, Node<TK>* rightChild) {
-    for (int i = x->count; i > pos; --i) x->keys[i] = x->keys[i - 1];
-    x->keys[pos] = k;
-    if (!x->leaf) {
-      for (int i = x->count + 1; i > pos + 1; --i) x->children[i] = x->children[i - 1];
-      x->children[pos + 1] = rightChild;
-    }
-    x->count += 1;
-  }
-
-  void split_node(Node<TK>* x, bool& promoted, TK& up, Node<TK>*& right) {
-    int mid = M / 2;  // clave de subida
-    up = x->keys[mid];
-
-    right = new Node<TK>(M);
-    right->leaf = x->leaf;
-
-    int rcount = M - mid - 1;  // claves que van al nodo derecho
-    for (int i = 0; i < rcount; ++i) right->keys[i] = x->keys[mid + 1 + i];
-    right->count = rcount;
-
-    if (!x->leaf) {
-      for (int i = 0; i <= rcount; ++i) right->children[i] = x->children[mid + 1 + i];
-      for (int i = rcount + 1; i <= M; ++i) right->children[i] = nullptr;
-    } else {
-      for (int i = 0; i <= M; ++i) right->children[i] = nullptr;
-    }
-
-    x->count = mid;
-    promoted = true;
-  }
-
-  bool insert_rec(Node<TK>* x, const TK& key, bool& promoted, TK& up, Node<TK>*& right) {
-    int i = 0;
-    while (i < x->count && x->keys[i] < key) ++i;
-    if (i < x->count && eq(x->keys[i], key)) return false;
-
-    if (x->leaf) {
-      for (int j = x->count; j > i; --j) x->keys[j] = x->keys[j - 1];
-      x->keys[i] = key;
-      x->count += 1;
-    } else {
-      bool c_prom = false;
-      TK c_up{};
-      Node<TK>* c_right = nullptr;
-
-      if (!insert_rec(x->children[i], key, c_prom, c_up, c_right)) return false;
-      if (c_prom) insert_key_at(x, i, c_up, c_right);
-    }
-
-    if (x->count == M) {
-      split_node(x, promoted, up, right);
-    } else {
-      promoted = false;
-      right = nullptr;
-    }
-    return true;
   }
 
   // helpers
