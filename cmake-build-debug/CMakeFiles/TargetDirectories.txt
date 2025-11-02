@@ -1,4 +1,0 @@
-C:/Users/ERIKA/Documents/JHOGAN/CICLO_4/AED/a/tarea-03-btree-include-brain/cmake-build-debug/CMakeFiles/tarea_03_btree_include_brain.dir
-C:/Users/ERIKA/Documents/JHOGAN/CICLO_4/AED/a/tarea-03-btree-include-brain/cmake-build-debug/CMakeFiles/p.dir
-C:/Users/ERIKA/Documents/JHOGAN/CICLO_4/AED/a/tarea-03-btree-include-brain/cmake-build-debug/CMakeFiles/edit_cache.dir
-C:/Users/ERIKA/Documents/JHOGAN/CICLO_4/AED/a/tarea-03-btree-include-brain/cmake-build-debug/CMakeFiles/rebuild_cache.dir
