@@ -542,15 +542,6 @@ class BTree {
     }
     if (!nodo->leaf) toString(nodo->children[nodo->count], sep, out, first);
   }
-
-  void range_search(Node<TK>* nodo, TK begin, TK end, vector<int>& ans) {
-    for (int i = 0; i < nodo->count; ++i) {
-      if (!nodo->leaf) range_search(nodo->children[i], begin, end, ans);
-      if (nodo->keys[i] >= begin && nodo->keys[i] <= end)
-        ans.push_back(nodo->keys[i]);
-    }
-    if (!nodo->leaf) range_search(nodo->children[nodo->count], begin, end, ans);
-  }
 };
 
 #endif
