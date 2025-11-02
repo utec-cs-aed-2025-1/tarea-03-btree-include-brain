@@ -5,6 +5,7 @@
 using namespace std;
 
 int main() {
+  //La implementación de este BTree no soporta valores repetidos
   BTree<int>* btree = new BTree<int>(3);
   int numbers[10] = {45, 75, 100, 36, 120, 70, 11, 111, 47, 114};
   for (int i = 0; i < 10; i++) {

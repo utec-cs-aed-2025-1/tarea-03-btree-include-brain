@@ -7,6 +7,7 @@ using namespace std;
 
 template <typename TK>
 class BTree {
+  //La implementación de este BTree no soporta valores repetidos
  private:
   Node<TK>* root;
   int M;  // grado u orden del arbol

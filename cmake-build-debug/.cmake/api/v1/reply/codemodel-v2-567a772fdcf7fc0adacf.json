@@ -1,0 +1,69 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"jsonFile" : "directory-.-Debug-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.29"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "tarea_03_btree_include_brain",
+					"targetIndexes" : 
+					[
+						0,
+						1
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "p::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p-Debug-15b876da5840a7983d1c.json",
+					"name" : "p",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tarea_03_btree_include_brain::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tarea_03_btree_include_brain-Debug-17f3a7375f2bc935aea9.json",
+					"name" : "tarea_03_btree_include_brain",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/Users/ERIKA/Documents/JHOGAN/CICLO_4/AED/a/tarea-03-btree-include-brain/cmake-build-debug",
+		"source" : "C:/Users/ERIKA/Documents/JHOGAN/CICLO_4/AED/a/tarea-03-btree-include-brain"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 7
+	}
+}
