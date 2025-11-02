@@ -2,9 +2,7 @@
 #define BTree_H
 #include <iostream>
 #include <vector>
-#include <stdexcept>
 #include "node.h"
-
 using namespace std;
 
 template <typename TK>
@@ -132,93 +130,31 @@ class BTree {
     n = 0;
   }
 
-  // retorna el total de elementos insertados
   int size() const { return n; }
 
-  // Construya un árbol B a partir de un vector de elementos ordenados
-  static BTree* build_from_ordered_vector(const std::vector<TK>& elements, int M) {
-    if (M < 3) throw std::invalid_argument("M debe ser como minimo 3");
-    BTree* tree = new BTree(M);
-    if (elements.empty()) return tree;
-
+  static BTree* build_from_ordered_vector(const vector<TK>& elements, int M) {
+  if (M < 3) throw std::invalid_argument("M debe ser al menos 3");
+  BTree* tree = new BTree(M);
+  if (elements.empty()) return tree;
     for (size_t i = 1; i < elements.size(); ++i)
-      if (!(elements[i-1] < elements[i]))
-        throw std::invalid_argument("Los elementos deben estar ordenados");
+    if (!(elements[i - 1] < elements[i]))
+      throw std::invalid_argument("Los elementos deben estar estrictamente ordenados y sin duplicados");
 
-        tree->root = build_recursive(elements, 0, elements.size(), M, /*isRoot=*/true);
-    return tree;
-  }
-    // construye nodo con rango elements[start,end)
-    static Node<TK>* build_recursive(const std::vector<TK>& elements, size_t start, size_t end, int M, bool isRoot) {
-        size_t n = end - start; //calcular el tamaño
-        if (n == 0) return nullptr;
+  long long N = static_cast<long long>(elements.size());
+  int max_h_est = 64;
+  vector<long long> minK, maxK;
+  compute_minmax_per_height(M, max_h_est, minK, maxK);
 
-        Node<TK>* node = new Node<TK>(M);
-    //calcular propiedades de llaves
-        int maxKeys = M - 1;
-        int minKeys = (M + 1) / 2 - 1;
+  int h = choose_height_for_root(N, M, minK, maxK);
+  if (h == -1) { delete tree; throw runtime_error("No se pudo determinar altura adecuada"); }
 
-        // Caso base: es una hoja
-        if (n <= static_cast<size_t>(maxKeys)) {
-            node->leaf = true;
-            node->count = static_cast<int>(n);
-            for (size_t i = 0; i < n; ++i) node->keys[i] = elements[start + i];
-            return node;
-        }
-        //Nodos internos
-
-        node->leaf = false;
-
-        // child_total = n - (k-1) (k:numero de hijos)
-        int minChildSize = isRoot ? 1 : minKeys;
-        int chosen_k = 0;
-
-        int max_k_possible = std::min(M,(int)(n));
-
-        for (int k = max_k_possible; k >= 2; --k) {
-            int parent_keys = k - 1;
-            int child_total = static_cast<int>(n) - parent_keys;
-            if (child_total < k * minChildSize) continue;  // no alcanza mínimo por hijo
-            if (child_total > k * maxKeys) continue;       // excede máximo por hijo
-            chosen_k = k;
-            break;
-        }
-
-        // Por defecto se toma k como binario
-        if (chosen_k == 0) chosen_k = 2;
-
-        int k = chosen_k;
-        int parent_keys = k - 1;
-        int child_total = (int)(n) - parent_keys;
-
-        vector<size_t> child_sizes(k, child_total / k);
-        //sobrantes
-        int rem = child_total % k;
-        for (int i = 0; i < rem; ++i) child_sizes[i]++;
-
-        size_t idx = start;
-        int key_idx = 0;
-        for (int i = 0; i < k; ++i) {
-            size_t child_start = idx;
-            size_t child_end = idx + child_sizes[i];
-
-            // subárbol del hijo
-            Node<TK>* child = build_recursive(elements, child_start, child_end, M, false);
-            node->children[i] = child;
-
-            //asignar llaves del padre
-            if (i < k - 1) {
-                node->keys[key_idx++] = elements[child_end];
-                // omitimos esa llave usada
-                idx = child_end + 1;
-            } else {
-                idx = child_end;
-            }
-        }
-
-        node->count = key_idx; //n
-        return node;
-    }
+  size_t pos = 0;
+  Node<TK>* root = build_subtree_from_sorted(elements, M, h, N, pos, minK, maxK, true);
+  if (!root) { delete tree; throw runtime_error("Construcción fallida"); }
+  tree->root = root;
+  tree->n = static_cast<int>(N);
+  return tree;
+}
 
   // Verifique las propiedades de un árbol B
   bool check_properties() {
@@ -546,13 +482,173 @@ class BTree {
     range_search_rec(x->children[x->count], a, b, out);
   }
 
+  //metodos de apoyo para la construccion de un arbol B desde un vector ordenado
+
+static void compute_minmax_per_height(int M, int max_h, vector<long long>& minK, vector<long long>& maxK) {
+  int maxKeys = M - 1;
+  int minKeys = (M + 1) / 2 - 1;
+  int minChildren = minKeys + 1;
+  int maxChildren = M;
+
+  minK.assign(max_h + 1, 0);
+  maxK.assign(max_h + 1, 0);
+
+  // altura 0 = hoja
+  minK[0] = (minKeys > 0) ? minKeys : 1;
+  maxK[0] = maxKeys;
+
+  for (int h = 1; h <= max_h; ++h) {
+    long long min_sub = (long long)minChildren * minK[h - 1] + (minChildren - 1);
+    long long max_sub = (long long)maxChildren * maxK[h - 1] + (maxChildren - 1);
+    minK[h] = (min_sub < 0) ? LLONG_MAX : min_sub;
+    maxK[h] = (max_sub < 0) ? (1LL<<60) : std::min(max_sub, (1LL<<60));
+  }
+}
+
+//  altura minima posible para la raíz que admite N claves
+static int choose_height_for_root(long long N, int M, const vector<long long>& minK, const vector<long long>& maxK) {
+  int max_h = (int)minK.size() - 1;
+  for (int h = 0; h <= max_h; ++h) {
+    long long min_root, max_root;
+    if (h == 0) {
+      min_root = 1;
+      max_root = maxK[0];
+    } else {
+      min_root = 2 * minK[h - 1] + 1; // raíz con al menos 2 hijos
+      max_root = maxK[h];
+    }
+    if (N >= min_root && N <= max_root) return h;
+  }
+  return -1;
+}
+
+// Numero de hijos k válido para un nodo interno
+static int choose_k_for_internal(long long target_n, long long minPer, long long maxPer, int k_min, int k_max) {
+  for (int k = k_min; k <= k_max; ++k) {
+    long long min_allowed = (long long)k * minPer + (k - 1);
+    long long max_allowed = (long long)k * maxPer + (k - 1);
+    if (target_n >= min_allowed && target_n <= max_allowed) return k;
+  }
+  // fallback razonable (calcula kb1 y ajusta al rango)
+  long long numero = target_n + 1;
+  long long kb1 = (numero + (maxPer + 1) - 1) / (maxPer + 1); // techo((target_n+1)/(maxPer+1))
+  long long kb = std::max((long long)k_min, std::min((long long)k_max, kb1));
+  if (kb < k_min) kb = k_min;
+  if (kb > k_max) kb = k_max;
+  return (int)kb;
+}
+
+// Repartir el child_total entre k hijos respetando limites
+static vector<long long> distribute_children_sizes(long long child_total, int k, long long minPer, long long maxPer) {
+  vector<long long> sizes(k, 0);
+  // asignar mínimos
+  for (int i = 0; i < k; ++i) sizes[i] = minPer;
+  long long remaining = child_total - (long long)k * minPer;
+  if (remaining < 0) remaining = 0;
+
+  // distribuir en hasta dos pasadas equilibradas (no sobrepasar maxPer)
+  for (int pass = 0; pass < 2 && remaining > 0; ++pass) {
+    for (int i = 0; i < k && remaining > 0; ++i) {
+      long long cap = maxPer - sizes[i];
+      if (cap <= 0) continue;
+      long long give = std::min(cap, remaining);
+      sizes[i] += give;
+      remaining -= give;
+    }
+  }
+
+  // Si sobre, repartir unitariamente
+  for (int i = 0; remaining > 0 && i < k; ++i) {
+    long long cap = maxPer - sizes[i];
+    if (cap <= 0) continue;
+    sizes[i]++; remaining--;
+  }
+
+  // Por si aun sobra
+  if (remaining > 0) {
+    long long base = child_total / k;
+    long long rem2 = child_total % k;
+    for (int i = 0; i < k; ++i) sizes[i] = base + (i < rem2 ? 1 : 0);
+  }
+
+  return sizes;
+}
+
+// ajuste local: si algún hijo quedó por debajo de minPer, intentar tomar de vecinos
+static void adjust_child_sizes(vector<long long>& sizes, long long minPer) {
+  int k = (int)sizes.size();
+  for (int i = 0; i < k; ++i) {
+    if (sizes[i] < minPer) {
+      long long need = minPer - sizes[i];
+      // tomar de la derecha
+      for (int j = i + 1; j < k && need > 0; ++j) {
+        long long can = sizes[j] - minPer;
+        long long take = std::min(can, need);
+        if (take > 0) { sizes[j] -= take; sizes[i] += take; need -= take; }
+      }
+      // tomar de la izquierda
+      for (int j = i - 1; j >= 0 && need > 0; --j) {
+        long long can = sizes[j] - minPer;
+        long long take = std::min(can, need);
+        if (take > 0) { sizes[j] -= take; sizes[i] += take; need -= take; }
+      }
+    }
+  }
+}
+
+// Construye un subárbol con target_n llaves, consumiendo desde una posicion global pos
+static Node<TK>* build_subtree_from_sorted(const vector<TK>& elements, int M, int height, long long target_n,
+size_t& pos, const vector<long long>& minK, const vector<long long>& maxK, bool is_root) {
+  if (target_n <= 0) return nullptr;
+
+  int minKeys = (M + 1) / 2 - 1;
+  int minChildren = minKeys + 1;
+  int maxChildren = M;
+
+  // caso hoja
+  if (height == 0) {
+    Node<TK>* leaf = new Node<TK>(M);
+    leaf->leaf = true;
+    leaf->count = static_cast<int>(target_n);
+    for (int i = 0; i < leaf->count; ++i) leaf->keys[i] = elements[pos++];
+    return leaf;
+  }
+
+  long long minPer = minK[height - 1];
+  long long maxPer = maxK[height - 1];
+
+  int k_min = is_root ? 2 : minChildren;
+  int k_max = maxChildren;
+
+  int k = choose_k_for_internal(target_n, minPer, maxPer, k_min, k_max);
+  long long child_total = target_n - (k - 1);
+
+  // repartir child_total entre k hijos
+  vector<long long> child_sizes = distribute_children_sizes(child_total, k, minPer, maxPer);
+  adjust_child_sizes(child_sizes, minPer);
+
+  // construir padre y sus hijos
+  Node<TK>* parent = new Node<TK>(M);
+  parent->leaf = false;
+  int key_idx = 0;
+  for (int i = 0; i < k; ++i) {
+    Node<TK>* child = build_subtree_from_sorted(elements, M, height - 1, child_sizes[i], pos, minK, maxK, false);
+    parent->children[i] = child;
+    if (i < k - 1) {
+      parent->keys[key_idx++] = elements[pos++]; // "separador" tomado de la secuencia
+    }
+  }
+  parent->count = key_idx;
+  return parent;
+}
+
   bool check(Node<TK>* x,
-             bool is_root,
-             int depth,
-             int& leaf_level,
-             bool& has_prev,
-             TK& prev) {
-    const int max_keys = M - 1;
+              bool is_root,
+              int depth,
+              int& leaf_level,
+              bool& has_prev,
+              TK& prev) {
+        const int max_keys = M - 1;
     const int min_keys_non_root = (M + 1) / 2 - 1;
 
     if (x->count < 0 || x->count > max_keys) return false;
