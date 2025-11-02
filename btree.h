@@ -371,22 +371,35 @@ class BTree {
     Node<TK>* left = x->children[idx];
     Node<TK>* right = x->children[idx + 1];
 
-    left->keys[left->count] = x->keys[idx];
-    for (int i = 0; i < right->count; ++i) left->keys[left->count + 1 + i] = right->keys[i];
-    if (!left->leaf) {
-      for (int i = 0; i <= right->count; ++i) left->children[left->count + 1 + i] = right->children[i];
-    }
-    left->count += 1 + right->count;
+    int pos = left->count; //posicion inicial
 
-    for (int i = idx + 1; i < x->count; ++i) x->keys[i - 1] = x->keys[i];
-    for (int i = idx + 2; i <= x->count; ++i) x->children[i - 1] = x->children[i];
+    // Copiar clave del padre
+    left->keys[pos] = x->keys[idx];
+
+    for (int i = 0; i < right->count; ++i) {
+      left->keys[pos + 1 + i] = right->keys[i];
+    }
+    if (!left->leaf) {
+      for (int i = 0; i <= right->count; ++i) {
+        left->children[pos + 1 + i] = right->children[i];
+        right->children[i] = nullptr;  // Evitar double-free
+      }
+    }
+
+    left->count = pos + 1 + right->count;
+
+    for (int i = idx + 1; i < x->count; ++i) {
+      x->keys[i - 1] = x->keys[i];
+    }
+
+    for (int i = idx + 2; i <= x->count; ++i) {
+      x->children[i - 1] = x->children[i];
+    }
     x->children[x->count] = nullptr;
     x->count -= 1;
 
-    right->killSelf();
     delete right;
   }
-
   void fill_child(Node<TK>* x, int idx) {
     int t = (M + 1) / 2;
     if (idx > 0 && x->children[idx - 1]->count >= t) {
