@@ -15,7 +15,7 @@ class BTree {
   int n;  // total de elementos en el arbol
 
  public:
-  BTree(int _M) : root(nullptr), M(_M) {}
+  BTree(int _M) : root(nullptr), M(_M), n(0){}
 
   //indica si se encuentra o no un elemento
   bool search(TK key) {
@@ -52,19 +52,21 @@ class BTree {
 
   void remove(TK key) {
     if (!root) return;
-    bool removed = remove_rec(root, key);
-    if (!removed) return;
-    --n;
-    if (!root->leaf && root->count == 0) {
-      Node<TK>* old = root;
-      root = root->children[0];
-      old->children[0] = nullptr;
-      old->killSelf();
-      delete old;
-    }
-    if (root && root->count == 0 && root->leaf) {
-      delete root;
-      root = nullptr;
+    bool found = remove_rec(root, key);
+    if (found) {
+      n--;
+      // Si la raíz quedó vacía pero tiene un hijo, promoverlo
+      if (root->count == 0 && !root->leaf) {
+        Node<TK>* old_root = root;
+        root = root->children[0];
+        old_root->children[0] = nullptr;
+        delete old_root;
+      }
+      // Si el árbol quedó completamente vacío
+      if (root && root->count == 0 && root->leaf) {
+        delete root;
+        root = nullptr;
+      }
     }
   }
 
@@ -232,6 +234,7 @@ class BTree {
   }
 
  private:
+  // metodos para la insercion
   Node<TK>* split(Node<TK>* node, TK& promoted_key, bool is_leaf) {
     int mid_idx = M / 2;
     promoted_key = node->keys[mid_idx];
@@ -252,7 +255,6 @@ class BTree {
         node->children[i] = nullptr;
       }
     }
-
     node->count = mid_idx;
     return right; // se retorna la key que sube y el nodo partido
   }
@@ -316,145 +318,208 @@ class BTree {
     }
   }
 
-  // remove
-  int find_index(Node<TK>* x, const TK& k) {
-    int i = 0;
-    while (i < x->count && x->keys[i] < k) ++i;
-    return i;
-  }
+  // metodos para la eliminacion
+  bool remove_rec(Node<TK>* node, TK key) {
+    if (!node) return false;
+    
+    int min_keys = (M + 1) / 2 - 1;
 
-  TK get_pred(Node<TK>* x, int idx) {
-    Node<TK>* cur = x->children[idx];
-    while (!cur->leaf) cur = cur->children[cur->count];
-    return cur->keys[cur->count - 1];
-  }
-
-  TK get_succ(Node<TK>* x, int idx) {
-    Node<TK>* cur = x->children[idx + 1];
-    while (!cur->leaf) cur = cur->children[0];
-    return cur->keys[0];
-  }
-
-  void borrow_from_prev(Node<TK>* x, int idx) {
-    Node<TK>* child = x->children[idx];
-    Node<TK>* sib = x->children[idx - 1];
-
-    for (int i = child->count; i > 0; --i) child->keys[i] = child->keys[i - 1];
-    if (!child->leaf) {
-      for (int i = child->count + 1; i > 0; --i) child->children[i] = child->children[i - 1];
-    }
-    child->keys[0] = x->keys[idx - 1];
-    if (!child->leaf) child->children[0] = sib->children[sib->count];
-    child->count += 1;
-
-    x->keys[idx - 1] = sib->keys[sib->count - 1];
-    if (!sib->leaf) sib->children[sib->count] = nullptr;
-    sib->count -= 1;
-  }
-
-  void borrow_from_next(Node<TK>* x, int idx) {
-    Node<TK>* child = x->children[idx];
-    Node<TK>* sib = x->children[idx + 1];
-
-    child->keys[child->count] = x->keys[idx];
-    if (!child->leaf) child->children[child->count + 1] = sib->children[0];
-    child->count += 1;
-
-    x->keys[idx] = sib->keys[0];
-
-    for (int i = 1; i < sib->count; ++i) sib->keys[i - 1] = sib->keys[i];
-    if (!sib->leaf) {
-      for (int i = 1; i <= sib->count; ++i) sib->children[i - 1] = sib->children[i];
-      sib->children[sib->count] = nullptr;
-    }
-    sib->count -= 1;
-  }
-
-  void merge_children(Node<TK>* x, int idx) {
-    Node<TK>* left = x->children[idx];
-    Node<TK>* right = x->children[idx + 1];
-
-    int pos = left->count; //posicion inicial
-
-    // Copiar clave del padre
-    left->keys[pos] = x->keys[idx];
-
-    for (int i = 0; i < right->count; ++i) {
-      left->keys[pos + 1 + i] = right->keys[i];
-    }
-    if (!left->leaf) {
-      for (int i = 0; i <= right->count; ++i) {
-        left->children[pos + 1 + i] = right->children[i];
-        right->children[i] = nullptr;  // Evitar double-free
+    // busqueda binaria para encontrar la posición
+    int left = 0, right = node->count - 1;
+    int pos = -1;
+    int child_idx = 0;
+    
+    while (left <= right) {
+      int mid = left + (right - left) / 2;
+      if (node->keys[mid] == key) {
+        pos = mid;
+        break;
       }
-    }
-
-    left->count = pos + 1 + right->count;
-
-    for (int i = idx + 1; i < x->count; ++i) {
-      x->keys[i - 1] = x->keys[i];
-    }
-
-    for (int i = idx + 2; i <= x->count; ++i) {
-      x->children[i - 1] = x->children[i];
-    }
-    x->children[x->count] = nullptr;
-    x->count -= 1;
-
-    delete right;
-  }
-
-  void fill_child(Node<TK>* x, int idx) {
-    int t = (M + 1) / 2;
-    if (idx > 0 && x->children[idx - 1]->count >= t) {
-      borrow_from_prev(x, idx);
-    } else if (idx < x->count && x->children[idx + 1]->count >= t) {
-      borrow_from_next(x, idx);
-    } else {
-      if (idx < x->count)
-        merge_children(x, idx);
-      else
-        merge_children(x, idx - 1);
-    }
-  }
-
-  bool remove_rec(Node<TK>* x, const TK& key) {
-    int idx = find_index(x, key);
-
-    if (idx < x->count && (x->keys[idx] == key)) {
-      if (x->leaf) {
-        for (int i = idx + 1; i < x->count; ++i) x->keys[i - 1] = x->keys[i];
-        x->count -= 1;
-        return true;
+      if (node->keys[mid] < key) {
+        left = mid + 1;
+        child_idx = left;
       } else {
-        int t = (M + 1) / 2;
-        Node<TK>* left = x->children[idx];
-        Node<TK>* right = x->children[idx + 1];
-
-        if (left->count >= t) {
-          TK pred = get_pred(x, idx);
-          x->keys[idx] = pred;
-          return remove_rec(left, pred);
-        } else if (right->count >= t) {
-          TK succ = get_succ(x, idx);
-          x->keys[idx] = succ;
-          return remove_rec(right, succ);
-        } else {
-          merge_children(x, idx);
-          return remove_rec(x->children[idx], key);
-        }
+        right = mid - 1;
+        child_idx = mid;
       }
-    } else {
-      if (x->leaf) return false;
-
-      bool lastChild = (idx == x->count);
-      int t = (M + 1) / 2;
-
-      if (x->children[idx]->count < t) fill_child(x, idx);
-
-      if (lastChild && idx > x->count) idx = x->count;
-      return remove_rec(x->children[idx], key);
     }
+    
+    //caso3: key en nodo interno
+    if (pos != -1 && !node->leaf) {
+      // reemplazar con sucesor
+      TK successor = get_successor(node->children[pos + 1]);
+      node->keys[pos] = successor;
+      return remove_rec(node->children[pos + 1], successor); // eliminar sucesor
+    }
+    
+    // CASO 0, 1, 2: key en nodo hoja o descender
+    if (node->leaf) {
+      if (pos == -1) return false; // Key no encontrada
+      
+      // eliminar la key desplazando elementos
+      for (int i = pos; i < node->count - 1; i++) {
+        node->keys[i] = node->keys[i + 1];
+      }
+      node->count--;
+      return true;
+    }
+    
+    //nodo interno: descender al hijo apropiado
+    Node<TK>* child = node->children[child_idx];
+    bool found = remove_rec(child, key);
+    
+    if (!found) return false;
+    
+    // si el hijo quedó con menos del mínimo
+    if (child->count < min_keys) {
+      fix_child(node, child_idx);
+    }
+    
+    return true;
+  }
+
+  TK get_successor(Node<TK>* node) {
+    while (!node->leaf) {
+      node = node->children[0];
+    }
+    return node->keys[0];
+  }
+  
+  // arreglar un hijo que quedó con menos del mínimo
+  void fix_child(Node<TK>* parent, int child_idx) {
+    int min_keys = (M + 1) / 2 - 1;
+    
+    //caso1: intentar borrow de hermano izquierdo
+    if (child_idx > 0 && parent->children[child_idx - 1]->count > min_keys) {
+      borrow_from_left(parent, child_idx);
+      return;
+    }
+    
+    //  caso2: intentar borrow de hermano derecho
+    if (child_idx < parent->count && parent->children[child_idx + 1]->count > min_keys) {
+      borrow_from_right(parent, child_idx);
+      return;
+    }
+    
+    //caso3 : merge con hermano
+    if (child_idx > 0) {
+      merge_with_left(parent, child_idx);
+    } else {
+      merge_with_right(parent, child_idx);
+    }
+  }
+  
+  // Rotar: tomar una key del hermano izquierdo
+  void borrow_from_left(Node<TK>* parent, int child_idx) {
+    Node<TK>* child = parent->children[child_idx];
+    Node<TK>* left_sibling = parent->children[child_idx - 1];
+    for (int i = child->count; i > 0; i--) {
+      child->keys[i] = child->keys[i - 1];
+    }
+    
+    // Desplazar children si no es hoja
+    if (!child->leaf) {
+      for (int i = child->count + 1; i > 0; i--) {
+        child->children[i] = child->children[i - 1];
+      }
+    }
+
+    child->keys[0] = parent->keys[child_idx - 1];
+    child->count++;
+    parent->keys[child_idx - 1] = left_sibling->keys[left_sibling->count - 1];
+    
+    //moover el último hijo del hermano al child (si no es hoja)
+    if (!child->leaf) {
+      child->children[0] = left_sibling->children[left_sibling->count];
+      left_sibling->children[left_sibling->count] = nullptr;
+    }
+    left_sibling->count--;
+  }
+
+  void borrow_from_right(Node<TK>* parent, int child_idx) {
+    Node<TK>* child = parent->children[child_idx];
+    Node<TK>* right_sibling = parent->children[child_idx + 1];
+    child->keys[child->count] = parent->keys[child_idx];
+    child->count++;
+    parent->keys[child_idx] = right_sibling->keys[0];
+    if (!child->leaf) {
+      child->children[child->count] = right_sibling->children[0];
+    }
+    for (int i = 0; i < right_sibling->count - 1; i++) {
+      right_sibling->keys[i] = right_sibling->keys[i + 1];
+    }
+    if (!right_sibling->leaf) {
+      for (int i = 0; i < right_sibling->count; i++) {
+        right_sibling->children[i] = right_sibling->children[i + 1];
+      }
+      right_sibling->children[right_sibling->count] = nullptr;
+    }
+    right_sibling->count--;
+  }
+  
+  // fusinar child con su hermano izquierdo
+  void merge_with_left(Node<TK>* parent, int child_idx) {
+    Node<TK>* child = parent->children[child_idx];
+    Node<TK>* left_sibling = parent->children[child_idx - 1];
+    
+    // bajar la key del padre al hermano izquierdo
+    left_sibling->keys[left_sibling->count] = parent->keys[child_idx - 1];
+    left_sibling->count++;
+    
+    // copiar todas las keys del child al hermano izquierdo
+    for (int i = 0; i < child->count; i++) {
+      left_sibling->keys[left_sibling->count] = child->keys[i];
+      left_sibling->count++;
+    }
+    
+    //copiar los children si no es hoja
+    if (!child->leaf) {
+      for (int i = 0; i <= child->count; i++) {
+        left_sibling->children[left_sibling->count - child->count + i] = child->children[i];
+        child->children[i] = nullptr;
+      }
+    }
+    
+    //eliminar key del padre y ajustar children
+    for (int i = child_idx - 1; i < parent->count - 1; i++) {
+      parent->keys[i] = parent->keys[i + 1];
+    }
+    for (int i = child_idx; i < parent->count; i++) {
+      parent->children[i] = parent->children[i + 1];
+    }
+    parent->children[parent->count] = nullptr;
+    parent->count--;
+    delete child;
+  }
+
+  void merge_with_right(Node<TK>* parent, int child_idx) {
+    Node<TK>* child = parent->children[child_idx];
+    Node<TK>* right_sibling = parent->children[child_idx + 1];
+
+    child->keys[child->count] = parent->keys[child_idx];
+    child->count++;
+
+    for (int i = 0; i < right_sibling->count; i++) {
+      child->keys[child->count] = right_sibling->keys[i];
+      child->count++;
+    }
+
+    if (!child->leaf) {
+      for (int i = 0; i <= right_sibling->count; i++) {
+        child->children[child->count - right_sibling->count + i] = right_sibling->children[i];
+        right_sibling->children[i] = nullptr;
+      }
+    }
+
+    for (int i = child_idx; i < parent->count - 1; i++) {
+      parent->keys[i] = parent->keys[i + 1];
+    }
+    for (int i = child_idx + 1; i < parent->count; i++) {
+      parent->children[i] = parent->children[i + 1];
+    }
+    parent->children[parent->count] = nullptr;
+    parent->count--;
+    delete right_sibling;
   }
 
   // helpers
