@@ -501,7 +501,7 @@ static void compute_minmax_per_height(int M, int max_h, vector<long long>& minK,
   for (int h = 1; h <= max_h; ++h) {
     long long min_sub = (long long)minChildren * minK[h - 1] + (minChildren - 1);
     long long max_sub = (long long)maxChildren * maxK[h - 1] + (maxChildren - 1);
-    const long long INF = 1e18;
+    const long long INF = 1e30;
     minK[h] = (min_sub < 0) ? INF : min_sub;
     maxK[h] = (max_sub < 0) ? (1LL<<60) : std::min(max_sub, (1LL<<60));
   }
