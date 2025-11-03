@@ -2,6 +2,7 @@
 #define BTree_H
 #include <iostream>
 #include <vector>
+#include <climits>
 #include "node.h"
 using namespace std;
 
